@@ -1,0 +1,97 @@
+﻿
+
+@{
+    ViewBag.Title = "Index2";
+}
+
+<h2>Index2</h2>
+
+<div>
+
+    <textarea id="area"></textarea>
+    <button id="openNewSessionButton">Send message</button>
+
+    <div id="messages"></div>
+</div>
+
+
+
+<script src="~/Scripts/jquery-1.10.2.js"></script>
+<script src="~/Scripts/jquery.signalR-2.2.0.js"></script>
+<script src="~/signalr/hubs"></script>
+<script src="//cdn.webrtc-experiment.com/RTCMultiConnection.js"></script>
+
+<script>
+    var onMessageCallbacks = {};
+
+    var conn = $.connection.VideoHub;
+
+    // Define new RTCMultiConnection
+    var connection = new RTCMultiConnection();
+    connection.session = {
+        audio: true,
+        video: true
+    };
+
+    // on getting local or remote media stream
+    connection.onstream = function (e) {
+        document.body.appendChild(e.mediaElement);
+    };
+
+    connection.connect();
+
+    document.querySelector('#openNewSessionButton').onclick = function () {
+        connection.open();
+    };
+
+
+
+
+
+    //on receiving sendMessage from server
+    //conn.client.sendMessage = function (message) {
+    //    $('#messages').append(message);
+    //}
+
+    conn.client.onMessageReceived = function (message) {
+        var message = JSON.parse(message);
+        if (onMessageCallbacks[message.channel]) {
+            onMessageCallbacks[message.channel](message.message);
+        }
+
+        $('#messages').append(message);
+    }
+
+    connection.openSignalingChannel = function (config) {
+        var channel = config.channel || this.channel;
+        onMessageCallbacks[channel] = config.onmessage;
+
+        if (config.onopen) setTimeout(config.onopen, 1000);
+        return {
+            send: function (message) {
+                message = JSON.stringify({
+                    message: message,
+                    channel: channel
+                });
+
+                hub.server.send(message);
+            }
+        }
+    }
+
+    $.connection.hub.start().done(function () {
+        console.log("SignalR Started");
+    });
+
+    $(document).ready(function () {
+        //var conn = $.hubConnection();
+        //var hub = conn.createHubProxy("videoHub");
+        //$('#send').click(function () {
+        //    //Send message to server
+        //    var data = $('#area').val();
+        //    conn.server.send(data);
+        //});
+
+    });
+
+</script>

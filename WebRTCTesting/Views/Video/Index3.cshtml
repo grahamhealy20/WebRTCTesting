@@ -1,0 +1,174 @@
+﻿@{
+    ViewBag.Title = "Index3";
+}
+
+<h2>Index3</h2>
+
+
+<script src="~/Scripts/jquery-1.10.2.js"></script>
+<script src="~/Scripts/jquery.signalR-2.2.0.js"></script>
+<script src="~/signalr/hubs"></script>
+@*<script src="~/Scripts/adapter.js"></script>*@
+
+@*<video id="video" autoplay></video>*@
+<div class="senderBox">
+    <h3>Self View</h3>
+    <video id="selfView" autoplay width="300"></video>
+</div>
+
+<div class="remoteBox">
+    <h3>Remote View</h3>
+    <video id="remoteView" autoplay></video>
+</div>
+
+
+@*<video id="remoteView2" autoplay></video>*@
+<button id="start">Start</button>
+
+<button id="close">Close</button>
+
+<script>
+
+    //var remoteView = $('#removeView');
+    //var selfView = $('#selfView');
+    //// User Media Constraints
+    //var contstraints = {
+    //    video: true
+    //};
+
+    //// Success callback func
+    //function successCallback(stream) {
+    //    streamToAttach = stream;
+    //    // get video element
+    //    var video = document.querySelector("video");
+
+    //    // Append video url to stream
+    //    video.src = window.URL.createObjectURL(stream);
+    //    //video.src = window.url.createObjectURL(stream);
+    //}
+
+    //// Error callback
+    //function errorCallback(error) {
+    //    alert("Navigator.getUserMedia error: " + error);
+    //}
+
+    //navigator.webkitGetUserMedia(contstraints, successCallback, errorCallback);
+
+    var hub = $.connection.VideoHub;
+    var streamToAttach;
+    var localStream;
+
+    var configuration = { "iceServers": [{ "url": "stun:stun.l.google.com:19302" }] };
+
+    var userId = 123;
+    var pc;
+
+    $('#close').disabled = true;
+
+    hub.client.onMessageReceived = function (message) {
+        console.log("Message received: " + message);
+        if (!pc) {
+            start();
+        }
+
+        var data = JSON.parse(message);
+        if (data.sdp) {
+            pc.setRemoteDescription(new RTCSessionDescription(data.sdp), function () {
+                // if we received an offer, we need to answer
+                if (pc.remoteDescription.type == 'offer') {
+                    console.log("Type: offer");
+                    pc.createAnswer(localDescCreated, logError);
+                }
+            },
+            logError);
+        }
+        else {
+            //console.log("candidate sent: " + data.candidate);
+            pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+    }
+
+    // start the hub
+    $.connection.hub.start().done(function () {
+        console.log("SignalR init");
+    });
+
+    function start() {
+        console.log("Start funcion");
+        pc = new webkitRTCPeerConnection(configuration);
+        // send any ice candidates to the other peer
+        pc.onicecandidate = function (evt) {
+            if (evt.candidate)
+                hub.server.send(JSON.stringify({
+                    'candidate': evt.candidate
+                }), userId);
+        };
+
+        // let the 'negotiationneeded' event trigger offer generation
+        pc.onnegotiationneeded = function () {
+            pc.createOffer(localDescCreated, logError);
+        }
+
+        // once remote stream arrives, show it in the remote video element
+        pc.onaddstream = function (evt) {
+            console.log("Setting Remote View");
+            streamToAttach = evt.stream;
+            remoteView.src = URL.createObjectURL(evt.stream);
+        };
+
+        // get a local stream, show it in a self-view and add it to be sent
+        navigator.webkitGetUserMedia({
+            'audio': true,
+            'video': true
+        }, function (stream) {
+            console.log("Setting local view");
+            localStream = stream;
+            selfView.src = URL.createObjectURL(stream);
+            pc.addStream(stream);
+        }, logError);
+    }
+
+    function localDescCreated(desc) {
+        pc.setLocalDescription(desc, function () {
+            hub.server.send(JSON.stringify({
+                'sdp': pc.localDescription
+            }), userId);
+        }, logError);
+    }
+
+    $('#start').click(function () {
+        console.log("Starting session");
+        start();
+    });
+
+    $('#close').click(function () {
+        //localStream.stop();
+        streamToAttach.stop();
+        console.log("Closing session");
+        pc.close();
+    });
+
+
+    //signalingChannel.onmessage = function (evt) {
+    //    if (!pc)
+    //        start();
+
+    //    var message = JSON.parse(evt.data);
+    //    if (message.sdp)
+    //        pc.setRemoteDescription(new RTCSessionDescription(message.sdp), function () {
+    //            // if we received an offer, we need to answer
+    //            if (pc.remoteDescription.type == 'offer')
+    //                pc.createAnswer(localDescCreated, logError);
+    //        }, logError);
+    //    else
+    //        pc.addIceCandidate(new RTCIceCandidate(message.candidate));
+    //};
+
+    function logError(error) {
+        console.log(error.name + ': ' + error.message);
+    }
+
+
+
+
+</script>
